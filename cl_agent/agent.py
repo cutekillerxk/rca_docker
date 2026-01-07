@@ -1188,15 +1188,9 @@ def create_llm(model_name: str = "qwen-8b") -> ChatOpenAI:
 
 # ==================== 工具函数定义 ====================
 
-@tool("get_cluster_logs", description="获取集群所有节点的最新日志内容，用来分析集群的整体状态")
+@tool("get_cluster_logs", description="获取集群所有节点的最新日志内容，用于查看集群状态和分析集群问题。返回所有节点（NameNode、DataNode、SecondaryNameNode）的最新日志，已过滤INFO级别日志。")
 def get_cluster_logs() -> str:
-    """
-    获取所有5个节点的日志内容。
-    返回格式化的日志文本，由Agent逐个分析每个节点。
-    
-    Returns:
-        格式化的日志文本，包含思考检查点
-    """
+    """获取集群所有节点的最新日志内容。"""
     print("调用get_cluster_logs工具")
     try:
         num_log_files = len(LOG_FILES_CONFIG)
@@ -1266,18 +1260,9 @@ def get_cluster_logs() -> str:
         return f"获取集群日志失败: {str(e)}"
 
 
-@tool("get_node_log", description="获取指定节点的日志内容，用来分析指定节点的状态")
+@tool("get_node_log", description="获取指定节点的日志内容，用于分析单个节点的状态。参数node_name: 节点名称（如namenode、datanode1、datanode2等）。")
 def get_node_log(node_name: str) -> str:
-    """
-    获取指定节点的日志内容。
-    支持的节点：s1 NameNode, s1 DataNode, s2 DataNode, s3 DataNode, s3 SecondaryNameNode
-    
-    Args:
-        node_name: 节点名称，可以是完整名称或简称
-    
-    Returns:
-        原始日志文本，由Agent进行分析
-    """
+    """获取指定节点的日志内容。"""
     print("调用get_node_log工具")
     try:
         log_content = get_node_log_by_name(node_name)
@@ -1286,15 +1271,9 @@ def get_node_log(node_name: str) -> str:
         return f"获取节点日志失败: {str(e)}"
 
 
-@tool("get_monitoring_metrics", description="获取集群的实时监控指标")
+@tool("get_monitoring_metrics", description="获取集群的实时监控指标（通过JMX接口）。返回NameNode和DataNodes的关键指标，包括节点状态、存储使用率、数据块状态等。")
 def get_monitoring_metrics() -> str:
-    """
-    获取HDFS集群的实时监控指标。
-    返回NameNode和DataNodes的关键指标，包括节点状态、存储使用率、数据块状态等。
-    
-    Returns:
-        格式化的监控指标文本
-    """
+    """获取集群的实时监控指标。"""
     print("调用get_monitoring_metrics工具")
     try:
         from .monitor_collector import collect_all_metrics, format_metrics_for_display
@@ -1334,19 +1313,9 @@ def get_monitoring_metrics() -> str:
         return f"获取监控指标失败: {str(e)}"
 
 
-@tool("search_logs_by_keyword", description="在指定节点日志中搜索关键词，快速定位问题")
+@tool("search_logs_by_keyword", description="在指定节点日志中搜索关键词，快速定位问题。参数：node_name（节点名称）、keyword（搜索关键词，如ERROR、WARN、Exception）、max_results（最大返回结果数，默认50）。")
 def search_logs_by_keyword(node_name: str, keyword: str, max_results: int = 50) -> str:
-    """
-    在指定节点日志中搜索关键词。
-    
-    Args:
-        node_name: 节点名称（如：s1 NameNode, s2 DataNode）
-        keyword: 搜索关键词（如：ERROR, WARN, Exception）
-        max_results: 最大返回结果数（默认50）
-    
-    Returns:
-        匹配的日志行及其上下文（时间戳、级别、消息）
-    """
+    """在指定节点日志中搜索关键词。"""
     print(f"调用search_logs_by_keyword工具: node={node_name}, keyword={keyword}, max_results={max_results}")
     try:
         # 1. 获取节点日志
@@ -1402,17 +1371,9 @@ def search_logs_by_keyword(node_name: str, keyword: str, max_results: int = 50) 
         return error_msg
 
 
-@tool("get_error_logs_summary", description="统计各节点的错误/警告数量，快速了解问题分布")
+@tool("get_error_logs_summary", description="统计各节点的错误/警告数量，快速了解问题分布。参数node_name（可选）：如果提供则只统计指定节点，不提供则统计所有节点。返回错误数量、错误类型分布、最新错误时间等。")
 def get_error_logs_summary(node_name: Optional[str] = None) -> str:
-    """
-    统计各节点的错误/警告数量，按时间排序。
-    
-    Args:
-        node_name: 节点名称（可选，不提供则统计所有节点）
-    
-    Returns:
-        错误统计摘要（节点、错误数量、最新错误时间、错误类型分布）
-    """
+    """统计各节点的错误/警告数量。"""
     print(f"调用get_error_logs_summary工具: node_name={node_name}")
     try:
         error_keywords = ['ERROR', 'WARN', 'Exception', 'FATAL', 'CRITICAL']
@@ -1723,32 +1684,9 @@ def _validate_hadoop_operation_command(command_args: List[str]) -> Tuple[bool, O
     return True, None
 
 
-@tool("hadoop_cluster_operation", description="执行Hadoop集群操作。command: stop/停止/关闭、start/启动、restart/重启。container: 可选，namenode/datanode1/datanode2。重要：如果用户要求关闭/启动/重启整个集群，container参数必须为None或不提供；只有操作单个节点时才指定container参数。")
+@tool("hadoop_cluster_operation", description="执行Hadoop集群操作（通过docker compose命令控制容器）。command: stop/停止/关闭、start/启动、restart/重启。container: 可选，namenode/datanode1/datanode2。重要：如果用户要求关闭/启动/重启整个集群，container参数必须为None或不提供；只有操作单个节点时才指定container参数。")
 def hadoop_cluster_operation(command: str, container: Optional[str] = None) -> str:
-    """
-    执行Hadoop集群操作（通过docker compose命令）。
-    
-    重要说明：
-    - 启动整个集群：使用 docker compose up -d
-    - 关闭整个集群：使用 docker compose stop
-    - 对单个节点操作：使用 docker compose start/stop/restart 节点名称
-    
-    支持的操作：
-    - "stop" 或 "停止" -> docker compose stop（整个集群）或 docker compose stop 节点名称（单个节点）
-    - "start" 或 "启动" -> docker compose up -d（整个集群）或 docker compose start 节点名称（单个节点）
-    - "restart" 或 "重启" -> docker compose restart 节点名称（仅支持单个节点）
-    
-    Args:
-        command: 操作类型（"stop"/"停止"、"start"/"启动"、"restart"/"重启"）
-        container: 节点名称（可选）。可选值：namenode, datanode1, datanode2
-                   **重要**：
-                   - 如果用户要求"关闭集群"、"停止集群"、"启动集群"等操作整个集群的命令，container必须为None或不提供
-                   - 只有操作单个节点时（如"关闭datanode1"、"停止namenode"）才指定container参数
-                   - 如果不指定container，会对整个集群执行操作
-    
-    Returns:
-        操作执行结果
-    """
+    """执行Hadoop集群操作（通过docker compose命令）。"""
     print(f"调用hadoop_cluster_operation工具: command={command}, container={container}")
     
     # 定义所有容器
@@ -1867,16 +1805,7 @@ def hadoop_cluster_operation(command: str, container: Optional[str] = None) -> s
 **注意**：容器必须已运行，否则返回错误
 """)
 def hadoop_auto_operation(operation: str, container: Optional[str] = None) -> str:
-    """
-    执行Hadoop集群操作（在容器内执行Hadoop服务命令）。
-    
-    Args:
-        operation: 操作类型（"start"/"stop"/"restart"）
-        container: 容器名称（可选）。如果为None，则操作整个集群
-    
-    Returns:
-        操作执行结果
-    """
+    """执行Hadoop集群操作（在容器内执行Hadoop服务命令）。"""
     print(f"调用hadoop_auto_operation工具: operation={operation}, container={container}")
     
     # 参数验证
@@ -1993,14 +1922,6 @@ def hadoop_auto_operation(operation: str, container: Optional[str] = None) -> st
                     output_parts.append(f"标准输出:\n{start_result.stdout}")
                 if start_result.stderr:
                     output_parts.append(f"标准错误:\n{start_result.stderr}")
-                
-                if stop_result.returncode == 0 and start_result.returncode == 0:
-                    output_parts.append(f"\n✅ 重启操作成功")
-                    # 提示Agent调用验证工具
-                    output_parts.append(f"\n💡 提示：建议调用 verify_cluster_health 工具验证修复是否成功")
-                else:
-                    output_parts.append(f"\n❌ 重启操作失败 (停止返回码: {stop_result.returncode}, 启动返回码: {start_result.returncode})")
-                
                 output = "\n".join(output_parts)
                 print(output)
                 return output
@@ -2074,18 +1995,7 @@ def hadoop_auto_operation(operation: str, container: Optional[str] = None) -> st
 **执行容器**：通常为namenode（集群级命令）
 """)
 def execute_hadoop_command(command_args: List[str]) -> str:
-    """
-    执行Hadoop命令（在容器内执行）。
-    
-    Args:
-        command_args: Hadoop命令参数列表，例如：
-            - ["hdfs", "dfsadmin", "-report"] - 查看集群状态
-            - ["hdfs", "dfsadmin", "-safemode", "get"] - 查看安全模式
-            - ["hdfs", "fsck", "/"] - 检查文件系统
-    
-    Returns:
-        命令执行结果
-    """
+    """执行Hadoop命令（在容器内执行）。"""
     print(f"调用execute_hadoop_command工具: command_args={command_args}")
     
     # 参数验证
@@ -2169,216 +2079,6 @@ VERIFY_CONFIG = {
 }
 
 
-@tool("verify_cluster_health", description="""
-验证HDFS集群健康状态。在修复操作后调用此工具，检查集群是否恢复正常。
-
-**功能**：
-- 检查所有DataNode是否在线（期望3个DataNode）
-- 检查NameNode状态是否正常
-- 检查数据块状态（是否有缺失或损坏的数据块）
-- 返回结构化的验证结果
-
-**使用场景**：
-- 执行修复操作（如重启节点、启动集群）后，调用此工具验证修复是否成功
-- 定期检查集群健康状态
-- 故障诊断后验证问题是否已解决
-
-**返回结果**：
-- overall_status: success/failed/partial（整体状态）
-- 各项检查的详细结果
-- 修复建议（如果发现问题）
-""")
-def verify_cluster_health() -> str:
-    """
-    验证HDFS集群健康状态。
-    
-    检查项：
-    1. DataNode状态：检查所有3个DataNode是否在线
-    2. NameNode状态：检查NameNode是否正常
-    3. 数据块状态：检查是否有缺失或损坏的数据块
-    
-    Returns:
-        结构化的验证结果字符串
-    """
-    print("调用verify_cluster_health工具")
-    
-    try:
-        # 1. 获取监控指标
-        from .monitor_collector import collect_all_metrics
-        metrics = collect_all_metrics()
-        
-        # 2. 获取集群报告
-        cluster_report_result = execute_hadoop_command(["hdfs", "dfsadmin", "-report"])
-        
-        # 3. 执行验证检查
-        checks = {}
-        overall_status = "success"
-        
-        # 检查1：DataNode状态
-        namenode_metrics = metrics.get("namenode", {})
-        datanodes_metrics = metrics.get("datanodes", {})
-        
-        # 统计在线DataNode数量
-        online_datanodes = 0
-        offline_datanodes = []
-        
-        for node_name, node_data in datanodes_metrics.items():
-            if (node_data.get("status") != "error" and 
-                node_data.get("metrics", {}).get("datanode_status", {}).get("value") == "running"):
-                online_datanodes += 1
-            else:
-                offline_datanodes.append(node_name)
-        
-        expected_count = VERIFY_CONFIG["expected_datanode_count"]
-        datanode_check_passed = online_datanodes >= expected_count
-        
-        checks["datanode_status"] = {
-            "status": "pass" if datanode_check_passed else "fail",
-            "details": f"在线DataNode: {online_datanodes}/{expected_count}",
-            "offline_nodes": offline_datanodes if offline_datanodes else None
-        }
-        
-        if not datanode_check_passed:
-            overall_status = "failed"
-        
-        # 检查2：NameNode状态
-        namenode_status = namenode_metrics.get("status", "error")
-        namenode_check_passed = namenode_status == "normal"
-        
-        checks["namenode_status"] = {
-            "status": "pass" if namenode_check_passed else "fail",
-            "details": f"NameNode状态: {namenode_status}"
-        }
-        
-        if not namenode_check_passed:
-            overall_status = "failed"
-        
-        # 检查3：数据块状态（从集群报告中解析）
-        missing_blocks = 0
-        corrupt_blocks = 0
-        
-        # 从集群报告中提取数据块信息
-        if "标准输出" in cluster_report_result:
-            report_lines = cluster_report_result.split("\n")
-            for line in report_lines:
-                if "Missing blocks:" in line:
-                    # 尝试提取数字
-                    match = re.search(r'Missing blocks:\s*(\d+)', line)
-                    if match:
-                        missing_blocks = int(match.group(1))
-                elif "Blocks with corrupt replicas:" in line:
-                    match = re.search(r'Blocks with corrupt replicas:\s*(\d+)', line)
-                    if match:
-                        corrupt_blocks = int(match.group(1))
-        
-        block_check_passed = (missing_blocks <= VERIFY_CONFIG["max_missing_blocks"] and 
-                             corrupt_blocks <= VERIFY_CONFIG["max_corrupt_blocks"])
-        
-        checks["block_status"] = {
-            "status": "pass" if block_check_passed else "fail",
-            "details": f"缺失数据块: {missing_blocks}, 损坏数据块: {corrupt_blocks}",
-            "missing_blocks": missing_blocks,
-            "corrupt_blocks": corrupt_blocks
-        }
-        
-        if not block_check_passed:
-            if overall_status == "success":
-                overall_status = "partial"  # 如果其他都正常，但数据块有问题，算部分成功
-            else:
-                overall_status = "failed"
-        
-        # 检查4：活跃DataNode数量（从NameNode指标）
-        live_datanodes = 0
-        dead_datanodes = 0
-        
-        if namenode_metrics.get("status") == "normal":
-            live_datanodes_metric = namenode_metrics.get("metrics", {}).get("live_datanodes", {})
-            dead_datanodes_metric = namenode_metrics.get("metrics", {}).get("dead_datanodes", {})
-            
-            # 尝试从heartbeat_value获取
-            live_datanodes = live_datanodes_metric.get("heartbeat_value", 0)
-            dead_datanodes = dead_datanodes_metric.get("heartbeat_value", 0)
-        
-        heartbeat_check_passed = (live_datanodes >= expected_count and dead_datanodes == 0)
-        
-        checks["heartbeat_status"] = {
-            "status": "pass" if heartbeat_check_passed else "fail",
-            "details": f"活跃DataNode: {live_datanodes}, 死掉的DataNode: {dead_datanodes}"
-        }
-        
-        if not heartbeat_check_passed:
-            if overall_status == "success":
-                overall_status = "partial"
-            else:
-                overall_status = "failed"
-        
-        # 生成验证结果摘要
-        result_parts = []
-        result_parts.append("=" * 60)
-        result_parts.append("集群健康状态验证结果")
-        result_parts.append("=" * 60)
-        result_parts.append(f"整体状态: {overall_status.upper()}")
-        result_parts.append("")
-        
-        # 详细检查结果
-        result_parts.append("检查项详情:")
-        result_parts.append("-" * 60)
-        
-        for check_name, check_result in checks.items():
-            status_icon = "✅" if check_result["status"] == "pass" else "❌"
-            check_name_cn = {
-                "datanode_status": "DataNode状态",
-                "namenode_status": "NameNode状态",
-                "block_status": "数据块状态",
-                "heartbeat_status": "心跳状态"
-            }.get(check_name, check_name)
-            
-            result_parts.append(f"{status_icon} {check_name_cn}: {check_result['details']}")
-            
-            # 如果有离线节点，显示详细信息
-            if check_result.get("offline_nodes"):
-                result_parts.append(f"   离线节点: {', '.join(check_result['offline_nodes'])}")
-        
-        result_parts.append("")
-        
-        # 生成修复建议
-        if overall_status != "success":
-            result_parts.append("修复建议:")
-            result_parts.append("-" * 60)
-            
-            if not datanode_check_passed:
-                result_parts.append(f"⚠️ 发现 {len(offline_datanodes)} 个DataNode离线: {', '.join(offline_datanodes)}")
-                result_parts.append("   建议：检查离线节点的容器状态，尝试重启对应的Hadoop服务")
-            
-            if not namenode_check_passed:
-                result_parts.append("⚠️ NameNode状态异常")
-                result_parts.append("   建议：检查NameNode日志，尝试重启NameNode服务")
-            
-            if not block_check_passed:
-                result_parts.append(f"⚠️ 发现数据块问题：缺失 {missing_blocks} 个，损坏 {corrupt_blocks} 个")
-                result_parts.append("   建议：检查DataNode日志，可能需要重新复制数据块")
-            
-            if not heartbeat_check_passed:
-                result_parts.append(f"⚠️ 心跳异常：{dead_datanodes} 个DataNode未向NameNode发送心跳")
-                result_parts.append("   建议：检查网络连接和DataNode服务状态")
-        else:
-            result_parts.append("✅ 所有检查项通过，集群状态正常")
-        
-        result_parts.append("")
-        result_parts.append("=" * 60)
-        
-        result = "\n".join(result_parts)
-        print(result)
-        return result
-        
-    except Exception as e:
-        error_msg = f"❌ 验证过程发生错误: {str(e)}"
-        print(f"[ERROR] {error_msg}")
-        import traceback
-        traceback.print_exc()
-        return error_msg
-
-
 # ==================== Agent创建 ====================
 
 def create_agent_instance(model_name: str = "qwen-8b"):
@@ -2409,7 +2109,7 @@ def create_agent_instance(model_name: str = "qwen-8b"):
     #     return search_operation_knowledge(query)
     
     llm = create_llm(model_name)
-    tools = [get_cluster_logs, get_node_log, get_monitoring_metrics, website_search, hadoop_auto_operation, execute_hadoop_command, verify_cluster_health]
+    tools = [get_cluster_logs, get_node_log, get_monitoring_metrics, website_search, hadoop_auto_operation, execute_hadoop_command]
  
     
     system_prompt = """你是HDFS集群问题诊断专家。
@@ -2424,15 +2124,11 @@ def create_agent_instance(model_name: str = "qwen-8b"):
 **集群操作工具使用说明**：
 - hadoop_auto_operation 用于在容器内执行Hadoop服务操作（启动/停止/重启节点或集群）
 - execute_hadoop_command 用于执行Hadoop管理命令（查看集群状态、安全模式等）
-- verify_cluster_health 用于验证集群健康状态（修复操作后必须调用此工具验证修复是否成功）
+
 
 **修复操作流程（重要）**：
 1. 执行修复操作（使用 hadoop_auto_operation 或 execute_hadoop_command）
-2. 修复操作成功后，**必须**调用 verify_cluster_health 工具验证修复是否成功
-3. 根据验证结果判断：
-   - 如果验证通过（overall_status=success），说明修复成功
-   - 如果验证失败（overall_status=failed），说明修复未成功，需要进一步诊断
-   - 如果验证部分成功（overall_status=partial），说明部分问题已解决，但仍有问题需要处理
+
 
 请用专业、清晰的语言回答。"""
     

@@ -2062,7 +2062,7 @@ def hadoop_auto_operation(operation: str, container: Optional[str] = None) -> st
 
 
 @tool("execute_hadoop_command", description="""
-执行Hadoop命令（hdfs、hadoop等）。在容器内执行Hadoop管理命令。
+执行Hadoop命令（hdfs、hadoop等）。在容器内执行Hadoop故障修复命令。
 
 **参数格式**：
 - command_args: List[str]，Hadoop命令参数列表
@@ -2804,7 +2804,7 @@ if __name__ == "__main__":
         {"messages": [{"role": "user", "content": "查看集群状态"}]},
         config=config
     )
-    
+     
     print("\n[结果]")
     print(result['messages'][-1].content)
 

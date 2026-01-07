@@ -253,7 +253,7 @@ def create_gradio_interface():
                     examples=[
                         "关闭节点datanode1",
                         "启动节点datanode1",
-                        "查看集群状态",
+                        "查看集群日志，分析集群状态",
                         "关闭整个hadoop集群",
                         "启动整个hadoop集群",
                         "NameNode 的作用是什么？",
@@ -457,6 +457,7 @@ def create_gradio_interface():
                         chat_history[-1] = [message, response]
                     
                     print(f"[DEBUG] 更新后chat_history[-1]: {chat_history[-1][0][:50] if len(chat_history[-1][0]) > 50 else chat_history[-1][0]}... -> {chat_history[-1][1][:50] if len(chat_history[-1][1]) > 50 else chat_history[-1][1]}...")
+                    update_monitoring_display()
                 else:
                     print("[ERROR] chat_history为空，无法更新")
                     chat_history.append([message, response])
