@@ -27,6 +27,9 @@ from .config import (
     THIRD_PARTY_API_KEY
 )
 
+# 导入集群上下文配置（用于生成System Prompt）
+from .cluster_context import generate_system_prompt
+
 # 导入工具函数
 from .tools import (
     get_cluster_logs,
@@ -153,45 +156,53 @@ def create_agent_instance(model_name: str = "qwen-8b"):
     
     llm = create_llm(model_name)
     tools = [get_cluster_logs, get_node_log, get_monitoring_metrics, website_search, hadoop_auto_operation, execute_hadoop_command, generate_repair_plan]
- 
+
+    # 使用cluster_context模块生成System Prompt
+    # 包含完整的集群配置信息、命令格式模板、工作流程等
+    system_prompt = generate_system_prompt()
     
-    system_prompt = """你是HDFS集群问题诊断专家。
+    # 追加工具使用说明（补充cluster_context中未包含的工具相关信息）
+    system_prompt += """
 
-重要提示：
-- 工具调用后，基于返回结果进行分析
-- 工具返回错误时，说明原因并建议解决方案
+## 可用工具及使用场景
 
-**分批分析要求**：
-调用get_cluster_logs时，按思考检查点逐个分析节点日志，最后汇总。
+### 信息收集类
+1. **get_cluster_logs** - 获取集群所有节点的最新日志
+   - 场景：开始诊断时，了解各节点状态
+   - 注意：按思考检查点逐个分析节点日志，最后汇总
 
-**集群操作工具使用说明**：
-- hadoop_auto_operation 用于在容器内执行Hadoop服务操作（启动/停止/重启节点或集群）
-- execute_hadoop_command 用于执行Hadoop管理命令（查看集群状态、安全模式等）
+2. **get_node_log(node_name)** - 获取指定节点的日志
+   - 场景：深入分析某个特定节点
 
-**修复操作流程（重要）**：
-1. 诊断问题（使用 get_cluster_logs、get_monitoring_metrics、execute_hadoop_command 等工具）
-2. 生成修复计划（使用 generate_repair_plan 工具）
-   - 诊断完成后，必须先生成结构化的修复计划
-   - 计划应包含：故障类型、修复步骤、预期结果
-   - 计划格式为JSON，需要在回复中清晰展示
-   - 如果用户明确请求生成修复计划，也要使用此工具
-3. 展示修复计划（在回复中展示JSON格式的修复计划，但暂不执行）
-   - 将修复计划以清晰的格式展示给用户
-   - 说明每个步骤的目的和预期结果
-   - 等待用户确认后再执行修复操作
-4. 执行修复操作（用户确认后，使用 hadoop_auto_operation 或 execute_hadoop_command）
-5. 验证修复结果（检查集群状态，确认修复是否成功）
+3. **get_monitoring_metrics** - 获取JMX监控指标
+   - 场景：了解集群的量化状态（存活节点数、存储使用等）
 
-**修复计划生成说明**：
-- generate_repair_plan 工具支持以下故障类型：
-  - datanode_down: DataNode下线
-  - cluster_id_mismatch: 集群ID不匹配
-  - namenode_safemode: NameNode安全模式
-  - datanode_disk_full: DataNode磁盘满
-  - namenode_down: NameNode下线
-  - multiple_datanodes_down: 多个DataNode下线
-- 如果诊断出上述故障类型，使用对应的故障类型生成计划
-- 如果是不常见的故障，可以尝试使用最接近的故障类型，或使用 "custom" 类型
+### 命令执行类
+4. **execute_hadoop_command(command_args)** - 执行Hadoop查询命令
+   - 参数格式：["hdfs", "dfsadmin", "-report"]
+   - 场景：执行hdfs、hadoop等命令获取信息
+
+5. **hadoop_auto_operation(operation, container)** - 启动/停止/重启Hadoop服务
+   - operation: "start" | "stop" | "restart"
+   - container: "namenode" | "datanode1" | "datanode2" | None(整个集群)
+   - 场景：管理Hadoop服务生命周期
+
+### 计划生成类
+6. **generate_repair_plan(fault_type, diagnosis_info, affected_nodes)** - 生成修复计划
+   - 支持的故障类型：datanode_down, cluster_id_mismatch, namenode_safemode, datanode_disk_full, namenode_down, multiple_datanodes_down
+   - 场景：诊断完成后，制定修复方案
+
+### 网络搜索
+7. **website_search** - 搜索Hadoop相关技术文档
+   - 场景：遇到不常见问题时，搜索解决方案
+
+## 修复操作流程（重要）
+
+1. **诊断问题** - 使用 get_cluster_logs、get_monitoring_metrics、execute_hadoop_command
+2. **生成修复计划** - 使用 generate_repair_plan 工具，输出JSON格式计划
+3. **展示计划** - 将计划展示给用户，等待确认
+4. **执行修复** - 用户确认后，使用 hadoop_auto_operation 或 execute_hadoop_command
+5. **验证结果** - 检查集群状态，确认修复成功
 
 请用专业、清晰的语言回答。"""
     
@@ -376,13 +387,10 @@ def _add_formatted_text(para, text: str):
         # 处理加粗文本 **text**
         if part.startswith('**') and part.endswith('**') and len(part) > 4:
             bold_text = part[2:-2]  # 移除 **
-            # 检查加粗文本内部是否还有代码标记
-            if '`' in bold_text:
-                # 递归处理
-                _add_formatted_text(para, bold_text)
-            else:
-                run = para.add_run(bold_text)
-                run.bold = True
+            # 直接输出加粗文本，不再递归处理内部格式
+            # 避免无限递归问题
+            run = para.add_run(bold_text)
+            run.bold = True
         
         # 处理代码文本 `text`
         elif part.startswith('`') and part.endswith('`') and len(part) > 2:
@@ -397,13 +405,11 @@ def _add_formatted_text(para, text: str):
             run = para.add_run(italic_text)
             run.italic = True
         
-        # 普通文本
+        # 普通文本 - 直接输出，不再递归
+        # 注意：如果文本中有不成对的格式标记（如单个 * 或 **），直接作为普通文本处理
+        # 避免无限递归
         else:
-            # 如果还有未处理的格式标记，递归处理
-            if '**' in part or '`' in part or (part.startswith('*') and part.endswith('*') and len(part) > 2):
-                _add_formatted_text(para, part)
-            else:
-                para.add_run(part)
+            para.add_run(part)
 
 
 def export_to_word(analysis_result: str, output_path: str) -> str:

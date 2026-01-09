@@ -347,13 +347,12 @@ def read_latest_logs_docker(docker_reader: DockerLogReader, last_pos: int,
             if not should_filter_log_line(line, FILTER_INFO_LOGS, FILTER_CLASSPATH_LOGS):
                 filtered_lines.append(line)
         
-        # 如果过滤后有内容，返回过滤后的内容；否则返回原始内容
-        if filtered_lines:
-            return filtered_lines, new_pos, latest_file
-        else:
-            # 过滤后没有内容，返回原始内容（不过滤）
-            logging.info(f"日志文件 {latest_file} 过滤后无内容，返回原始内容")
-            return lines, new_pos, latest_file
+        # 始终返回过滤后的内容（即使为空）
+        # 如果过滤后为空，说明日志都是INFO级别，无需展示
+        if not filtered_lines:
+            logging.info(f"日志文件 {latest_file} 过滤后无异常日志（全为INFO级别）")
+        
+        return filtered_lines, new_pos, latest_file
         
     except Exception as e:
         error_msg = f"读取容器日志文件失败（容器: {docker_reader.container}, 路径: {docker_reader.log_path}）: {str(e)}"

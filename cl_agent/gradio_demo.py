@@ -678,7 +678,7 @@ def main():
             return
         
         _shutting_down = True
-        print("\n[INFO] 收到中断信号，正在关闭服务器...")
+        print("\n[INFO] 收到中断信号，正在关闭服务器...") 
         
         # 在新线程中关闭，避免阻塞信号处理
         import threading
