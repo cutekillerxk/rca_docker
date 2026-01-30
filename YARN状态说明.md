@@ -94,7 +94,7 @@ docker exec -it namenode sh -c 'su - hadoop -c "vim /usr/local/hadoop/etc/hadoop
 - `su - hadoop`：切换到hadoop用户（`-`表示加载环境变量）
 - `vim`：文本编辑器
 
-2. 在vim中，按`i`进入插入模式，删除现有内容，粘贴以下配置：
+2. 在vim中，按`i`进入插入模式，删除现有内容，粘贴以下配置： 
 
 ```xml
 <?xml version="1.0"?>
@@ -226,6 +226,25 @@ docker exec -it namenode sh -c 'su - hadoop -c "vim /usr/local/hadoop/etc/hadoop
     <description>使用YARN运行MapReduce任务</description>
   </property>
   
+  <!-- MapReduce环境变量配置（必需） -->
+  <property>
+    <name>yarn.app.mapreduce.am.env</name>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+    <description>ApplicationMaster环境变量，指定MapReduce目录</description>
+  </property>
+  
+  <property>
+    <name>mapreduce.map.env</name>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+    <description>Map任务环境变量，指定MapReduce目录</description>
+  </property>
+  
+  <property>
+    <name>mapreduce.reduce.env</name>
+    <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+    <description>Reduce任务环境变量，指定MapReduce目录</description>
+  </property>
+  
   <!-- MapReduce历史服务器（可选，用于查看历史任务） -->
   <property>
     <name>mapreduce.jobhistory.address</name>
@@ -248,8 +267,13 @@ docker exec -it namenode sh -c 'su - hadoop -c "vim /usr/local/hadoop/etc/hadoop
 | 配置项 | 值 | 作用 |
 |--------|-----|------|
 | `mapreduce.framework.name` | `yarn` | 使用YARN运行MapReduce（而不是旧的MapReduce v1） |
+| `yarn.app.mapreduce.am.env` | `HADOOP_MAPRED_HOME=/usr/local/hadoop` | **必需**：设置ApplicationMaster环境变量，让Container能找到MapReduce类库 |
+| `mapreduce.map.env` | `HADOOP_MAPRED_HOME=/usr/local/hadoop` | **必需**：设置Map任务环境变量 |
+| `mapreduce.reduce.env` | `HADOOP_MAPRED_HOME=/usr/local/hadoop` | **必需**：设置Reduce任务环境变量 |
 | `mapreduce.jobhistory.address` | `namenode:10020` | 历史服务器地址（可选，用于查看已完成任务） |
 | `mapreduce.jobhistory.webapp.address` | `namenode:19888` | 历史服务器Web UI（可选） |
+
+**重要**：`yarn.app.mapreduce.am.env`、`mapreduce.map.env` 和 `mapreduce.reduce.env` 这三个配置是**必需的**，缺少它们会导致 `ClassNotFoundException: org.apache.hadoop.mapreduce.v2.app.MRAppMaster` 错误。
 
 4. 将相同配置复制到 datanode1 和 datanode2（同上）
 
@@ -287,7 +311,7 @@ docker exec namenode sh -c 'su - hadoop -c "jps"'
 
 如果没看到，查看日志：
 ```bash
-docker exec namenode sh -c 'su - hadoop -c "tail -50 /usr/local/hadoop/logs/yarn-hadoop-resourcemanager-namenode.log"'
+docker exec namenode sh -c 'su - hadoop -c "tail -50 /usr/local/hadoop/logs/hadoop-hadoop-resourcemanager-namenode.log"'
 ```
 
 ---
@@ -355,7 +379,30 @@ docker exec namenode sh -c 'su - hadoop -c "source /usr/local/hadoop/etc/hadoop/
 
 #### 方法2：访问Web UI
 
+**本地访问**（宿主机就是你的电脑）：
 在浏览器打开：`http://localhost:8088`
+
+**远程访问**（宿主机是远程Linux服务器）：
+在浏览器打开：`http://<服务器IP>:8088`
+
+例如：
+- 如果服务器IP是 `192.168.1.100`，访问：`http://192.168.1.100:8088`
+- 如果服务器IP是 `10.0.0.50`，访问：`http://10.0.0.50:8088`
+
+**注意事项**：
+1. 确保端口映射已配置（`docker-compose.yml` 中已有 `0.0.0.0:8088:8088`）
+2. 如果无法访问，检查：
+   - 服务器防火墙是否开放8088端口
+   - 云服务器安全组规则是否允许8088端口入站
+   - 服务器是否在运行：`docker ps | grep namenode`
+
+**查看服务器IP**：
+```bash
+# 在远程服务器上执行
+hostname -I
+# 或
+ip addr show
+```
 
 应该看到：
 - 集群概览
@@ -380,18 +427,50 @@ docker exec namenode sh -c 'su - hadoop -c "source /usr/local/hadoop/etc/hadoop/
 
 #### 测试1：Pi计算（最简单）
 
+**在宿主机执行**：
 ```bash
 docker exec namenode sh -c 'su - hadoop -c "source /usr/local/hadoop/etc/hadoop/hadoop-env.sh && /usr/local/hadoop/bin/yarn jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar pi 2 10"'
 ```
 
-参数说明：
-- `yarn jar`：通过YARN运行jar包
-- `/usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar`：MapReduce示例程序路径
-- `pi`：计算Pi的程序
-- `2`：Map任务数量
-- `10`：每个Map任务的采样点数
+**在容器内（hadoop用户）执行**（简化版）：
+```bash
+# 如果PATH已设置，可以直接用：
+yarn jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar pi 2 10
 
-预期结果：输出Pi的近似值（如3.14...）
+# 如果PATH未设置，使用完整路径：
+/usr/local/hadoop/bin/yarn jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar pi 2 10
+```
+
+**命令作用**：
+通过MapReduce分布式计算来估算圆周率π的值。这是一个经典的MapReduce示例程序，用于验证YARN和MapReduce框架是否正常工作。
+
+**参数详细说明**：
+
+| 参数 | 说明 | 示例值 |
+|------|------|--------|
+| `yarn jar` | 通过YARN框架运行jar包 | - |
+| `/usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar` | MapReduce示例程序jar包的完整路径 | - |
+| `pi` | 程序名称，表示运行Pi计算程序 | - |
+| `2` | **Map任务数量**（并行度）<br>表示启动2个Map任务同时计算<br>数值越大，并行度越高，计算越快 | 2 |
+| `10` | **每个Map任务的采样点数**<br>每个Map任务会生成10个随机点<br>数值越大，结果越精确，但计算时间越长 | 10 |
+
+**计算原理**（蒙特卡洛方法）：
+1. 在一个单位正方形内随机生成点
+2. 统计落在单位圆内的点的数量
+3. 根据比例估算π值：π ≈ 4 × (圆内点数 / 总点数)
+
+**参数选择建议**：
+- **快速测试**：`pi 2 10`（2个Map任务，每个10个采样点）
+- **更精确**：`pi 4 100`（4个Map任务，每个100个采样点）
+- **高精度**：`pi 8 1000`（8个Map任务，每个1000个采样点）
+
+**预期结果**：
+```
+...
+Estimated value of Pi is 3.141592653589...
+```
+
+输出Pi的近似值（如3.14...），证明YARN和MapReduce正常工作。
 
 #### 测试2：WordCount（经典示例）
 
@@ -441,7 +520,99 @@ yarn	1
 
 ## 常见问题排查
 
-### 问题1：ResourceManager启动失败
+### 问题1：MapReduce任务因内存不足失败（InvalidResourceRequestException）
+
+**错误信息**：
+```
+Invalid resource request! Cannot allocate containers as requested resource is greater than maximum allowed allocation. 
+Requested resource=<memory:1536, vCores:1>, 
+maximum allowed allocation=<memory:1024, vCores:2>
+```
+
+**原因**：
+- MapReduce任务默认请求1536MB内存
+- 但`yarn-site.xml`中配置的最大内存只有1024MB
+- 请求的资源超过了允许的最大值
+
+**解决方案1：增加YARN最大内存配置（推荐）**
+
+修改所有节点的`yarn-site.xml`，增加最大内存限制：
+
+```bash
+# 在namenode容器中编辑
+docker exec -it namenode sh -c 'su - hadoop -c "vim /usr/local/hadoop/etc/hadoop/yarn-site.xml"'
+```
+
+找到并修改以下配置项：
+```xml
+<property>
+  <name>yarn.scheduler.maximum-allocation-mb</name>
+  <value>2048</value>  <!-- 从1024改为2048 -->
+  <description>单个Container最大内存（MB）</description>
+</property>
+
+<property>
+  <name>yarn.nodemanager.resource.memory-mb</name>
+  <value>2048</value>  <!-- 从1024改为2048 -->
+  <description>每个NodeManager可用内存（MB）</description>
+</property>
+```
+
+**注意**：`yarn.nodemanager.resource.memory-mb` 必须 ≥ `yarn.scheduler.maximum-allocation-mb`
+
+将相同配置复制到其他节点（datanode1、datanode2），然后重启服务：
+
+```bash
+# 重启ResourceManager
+docker exec namenode sh -c 'su - hadoop -c "yarn --daemon stop resourcemanager && yarn --daemon start resourcemanager"'
+
+# 重启所有NodeManager
+docker exec namenode sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+docker exec datanode1 sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+docker exec datanode2 sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+```
+
+**说明**：
+- YARN 的 `yarn --daemon` 命令**没有 `restart` 选项**，只支持 `start` 和 `stop`
+- **重启的标准做法**：先执行 `stop`，再执行 `start`
+- `&&` 的作用：只有前一个命令（`stop`）**成功执行**后，才会执行后一个命令（`start`）
+- 这样可以确保服务完全停止后再启动，避免端口冲突或资源占用问题
+
+**验证重启是否成功**：
+```bash
+# 检查ResourceManager进程
+docker exec namenode sh -c 'su - hadoop -c "jps"'
+# 应该看到：ResourceManager
+
+# 检查NodeManager进程
+docker exec namenode sh -c 'su - hadoop -c "jps"'
+# 应该看到：NodeManager
+```
+
+**解决方案2：提交任务时指定更小的内存（临时方案）**
+
+如果不想修改配置，可以在提交任务时指定内存参数：
+
+```bash
+# 使用-D参数指定Map和Reduce的内存
+yarn jar /usr/local/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.3.6.jar \
+  pi \
+  -Dmapreduce.map.memory.mb=512 \
+  -Dmapreduce.reduce.memory.mb=512 \
+  2 10
+```
+
+**推荐配置值**（根据容器实际内存调整）：
+
+| 容器内存 | yarn.nodemanager.resource.memory-mb | yarn.scheduler.maximum-allocation-mb |
+|---------|-------------------------------------|--------------------------------------|
+| 2GB     | 1536                                | 1536                                 |
+| 4GB     | 3072                                | 3072                                 |
+| 8GB     | 6144                                | 6144                                 |
+
+---
+
+### 问题2：ResourceManager启动失败
 
 可能原因：
 1. 端口被占用
@@ -450,10 +621,10 @@ yarn	1
 排查方法：
 ```bash
 # 查看日志
-docker exec namenode sh -c 'su - hadoop -c "tail -50 /usr/local/hadoop/logs/yarn-hadoop-resourcemanager-namenode.log"'
+docker exec namenode sh -c 'su - hadoop -c "tail -50 /usr/local/hadoop/logs/hadoop-hadoop-resourcemanager-namenode.log"'
 ```
 
-### 问题2：NodeManager无法连接到ResourceManager
+### 问题3：NodeManager无法连接到ResourceManager
 
 可能原因：
 1. ResourceManager未启动
@@ -469,7 +640,53 @@ docker exec namenode sh -c 'su - hadoop -c "jps"'
 docker exec datanode1 sh -c 'su - hadoop -c "cat /usr/local/hadoop/etc/hadoop/yarn-site.xml | grep resourcemanager.hostname"'
 ```
 
-### 问题3：任务提交失败
+### 问题4：MapReduce任务失败 - ClassNotFoundException: MRAppMaster
+
+**错误信息**：
+```
+Error: Could not find or load main class org.apache.hadoop.mapreduce.v2.app.MRAppMaster
+Caused by: java.lang.ClassNotFoundException: org.apache.hadoop.mapreduce.v2.app.MRAppMaster
+```
+
+**原因**：
+`mapred-site.xml` 中缺少 `HADOOP_MAPRED_HOME` 环境变量配置，导致Container无法找到MapReduce类库。
+
+**解决方案**：
+
+在所有节点的 `mapred-site.xml` 中添加以下配置：
+
+```xml
+<property>
+  <name>yarn.app.mapreduce.am.env</name>
+  <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+</property>
+
+<property>
+  <name>mapreduce.map.env</name>
+  <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+</property>
+
+<property>
+  <name>mapreduce.reduce.env</name>
+  <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+</property>
+```
+
+然后重启ResourceManager和所有NodeManager：
+
+```bash
+# 重启ResourceManager
+docker exec namenode sh -c 'su - hadoop -c "yarn --daemon stop resourcemanager && yarn --daemon start resourcemanager"'
+
+# 重启所有NodeManager
+docker exec namenode sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+docker exec datanode1 sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+docker exec datanode2 sh -c 'su - hadoop -c "yarn --daemon stop nodemanager && yarn --daemon start nodemanager"'
+```
+
+---
+
+### 问题5：任务提交失败
 
 可能原因：
 1. YARN服务未启动

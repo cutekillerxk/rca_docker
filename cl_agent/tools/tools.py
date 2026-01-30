@@ -554,13 +554,19 @@ def hadoop_auto_operation(operation: str, container: Optional[str] = None) -> st
 
 
 @tool("execute_hadoop_command", description="""
-执行Hadoop命令（hdfs、hadoop等）。在容器内执行Hadoop管理命令。
+执行Hadoop命令（hdfs、hadoop、yarn等）。在容器内执行Hadoop管理命令。
 
 **参数格式**：
 - command_args: List[str]，Hadoop命令参数列表
-- 示例：["hdfs", "dfsadmin", "-report"]、["hdfs", "dfsadmin", "-safemode", "get"]
+- 示例：
+  - HDFS命令：["hdfs", "dfsadmin", "-report"]、["hdfs", "dfsadmin", "-safemode", "get"]
+  - YARN命令：["yarn", "application", "-list"]、["yarn", "application", "-status", "<application_id>"]、["yarn", "logs", "-applicationId", "<application_id>"]
 
-**支持的命令**：hdfs dfsadmin、hdfs fsck、hdfs dfs等（只读查询命令）
+**支持的命令**：
+- hdfs: dfsadmin、fsck、dfs等（只读查询命令）
+- hadoop: fs、version、classpath等
+- yarn: application（-list、-status、-kill）、node（-list、-status）、logs（-applicationId）、top、queue等（只读查询命令）
+
 **执行容器**：通常为namenode（集群级命令）
 """)
 def execute_hadoop_command(command_args: List[str]) -> str:
@@ -576,8 +582,8 @@ def execute_hadoop_command(command_args: List[str]) -> str:
     
     # 构建完整命令
     base_cmd = command_args[0]
-    if base_cmd not in ['hdfs', 'hadoop']:
-        return f"❌ 错误：不支持的命令 '{base_cmd}'。支持的命令：hdfs, hadoop"
+    if base_cmd not in ['hdfs', 'hadoop', 'yarn']:
+        return f"❌ 错误：不支持的命令 '{base_cmd}'。支持的命令：hdfs, hadoop, yarn"
     
     # 安全检查
     full_command_str = ' '.join(command_args)
@@ -641,12 +647,19 @@ def execute_hadoop_command(command_args: List[str]) -> str:
 
 **参数说明**：
 - fault_type: 故障类型，可选值：
-  - "datanode_down": DataNode下线
-  - "cluster_id_mismatch": 集群ID不匹配
-  - "namenode_safemode": NameNode安全模式
-  - "datanode_disk_full": DataNode磁盘满
-  - "namenode_down": NameNode下线
-  - "multiple_datanodes_down": 多个DataNode下线
+  - HDFS故障：
+    - "datanode_down": DataNode下线
+    - "cluster_id_mismatch": 集群ID不匹配
+    - "namenode_safemode": NameNode安全模式
+  - YARN故障：
+    - "resourcemanager_down": ResourceManager下线
+    - "nodemanager_down": NodeManager下线
+    - "yarn_config_error": YARN配置错误
+  - MapReduce故障：
+    - "mapreduce_memory_insufficient": MapReduce任务内存不足
+    - "mapreduce_disk_insufficient": MapReduce任务磁盘空间不足
+    - "mapreduce_shuffle_failed": MapReduce Shuffle阶段失败
+    - "mapreduce_task_timeout": MapReduce任务超时
   - "custom": 自定义故障（将使用LLM生成计划）
 - diagnosis_info: 诊断信息（字符串），包含故障详情、影响的节点等
 - affected_nodes: 受影响的节点列表（可选），如：["datanode1", "datanode2"]

@@ -155,7 +155,7 @@ def create_agent_instance(model_name: str = "qwen-8b"):
     #     return search_operation_knowledge(query)
     
     llm = create_llm(model_name)
-    tools = [get_cluster_logs, get_node_log, get_monitoring_metrics, website_search]
+    tools = [get_cluster_logs, get_node_log, get_monitoring_metrics, website_search, hadoop_auto_operation, execute_hadoop_command, generate_repair_plan]
 
     # 使用cluster_context模块生成System Prompt
     # 包含完整的集群配置信息、命令格式模板、工作流程等
@@ -177,15 +177,32 @@ def create_agent_instance(model_name: str = "qwen-8b"):
 3. **get_monitoring_metrics** - 获取JMX监控指标
    - 场景：了解集群的量化状态（存活节点数、存储使用等）
 
+### 命令执行类
+4. **execute_hadoop_command(command_args)** - 执行Hadoop查询命令
+   - 参数格式：["hdfs", "dfsadmin", "-report"]
+   - 场景：执行hdfs、hadoop等命令获取信息
+
+5. **hadoop_auto_operation(operation, container)** - 启动/停止/重启Hadoop服务
+   - operation: "start" | "stop" | "restart"
+   - container: "namenode" | "datanode1" | "datanode2" | None(整个集群)
+   - 场景：管理Hadoop服务生命周期
+
+### 计划生成类
+6. **generate_repair_plan(fault_type, diagnosis_info, affected_nodes)** - 生成修复计划
+   - 支持的故障类型：datanode_down, cluster_id_mismatch, namenode_safemode, datanode_disk_full, namenode_down, multiple_datanodes_down
+   - 场景：诊断完成后，制定修复方案
+
 ### 网络搜索
-4. **website_search** - 搜索Hadoop相关技术文档
+7. **website_search** - 搜索Hadoop相关技术文档
    - 场景：遇到不常见问题时，搜索解决方案
 
-## 故障诊断流程（重要）
+## 修复操作流程（重要）
 
-1. **收集信息** - 使用 get_cluster_logs、get_monitoring_metrics、execute_hadoop_command 获取集群状态
-2. **分析问题** - 分析日志和监控指标，识别故障类型和根本原因
-3. **输出诊断结果** - 按照诊断输出格式要求，提供详细的故障诊断报告
+1. **诊断问题** - 使用 get_cluster_logs、get_monitoring_metrics、execute_hadoop_command
+2. **生成修复计划** - 使用 generate_repair_plan 工具，输出JSON格式计划
+3. **展示计划** - 将计划展示给用户，等待确认
+4. **执行修复** - 用户确认后，使用 hadoop_auto_operation 或 execute_hadoop_command
+5. **验证结果** - 检查集群状态，确认修复成功
 
 请用专业、清晰的语言回答。"""
     

@@ -217,13 +217,64 @@ def should_filter_log_line(line: str, filter_info: bool = True, filter_classpath
     
     # 过滤classpath行
     if filter_classpath:
+        # 方法1：匹配标准的STARTUP_MSG classpath格式
         if re.search(r'STARTUP_MSG:\s+classpath\s*=', line, re.IGNORECASE):
             return True
+        
+        # 方法2：匹配包含大量jar包路径的长行（classpath配置）
+        # 特征：包含多个.jar:或.jar/，且行长度超过500字符
+        jar_count = len(re.findall(r'\.jar[:/]', line))
+        if jar_count >= 10 and len(line) > 500:
+            return True
+        
+        # 方法3：匹配以hadoop路径开头，包含大量jar路径的行
+        # 匹配：/usr/local/hadoop/share/hadoop 或 hadoop/share/hadoop 开头
+        if re.match(r'^(/usr/local/)?hadoop/share/hadoop', line.strip()):
+            if jar_count >= 5:
+                return True
     
     # 过滤INFO级别日志
     if filter_info:
-        # 匹配标准格式：时间戳 + INFO
-        if re.search(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\s]+\d+\s+INFO\s+', line):
+        # 检查是否是INFO级别日志
+        is_info_log = re.search(r'\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[,\s]+\d+\s+INFO\s+', line)
+        
+        if is_info_log:
+            # 定义重要的INFO日志关键词白名单（即使过滤INFO，这些也要保留）
+            important_keywords = [
+                # DataNode相关
+                r'removeDeadDatanode',      # DataNode下线
+                r'lost heartbeat',          # 心跳丢失
+                r'registerDatanode',        # DataNode注册
+                r'dead.*datanode',         # 死掉的DataNode
+                r'removed.*datanode',      # 移除的DataNode
+                # 安全模式相关
+                r'safe mode',              # 安全模式
+                r'Leaving safe mode',      # 退出安全模式
+                r'Entering safe mode',     # 进入安全模式
+                # 块相关
+                r'UnderReplicatedBlocks',  # 副本不足的块
+                r'MissingBlocks',          # 丢失的块
+                r'CorruptBlocks',          # 损坏的块
+                # 网络拓扑相关
+                r'Removing a node',        # 移除节点
+                r'Adding a new node',      # 添加节点
+                # 集群ID相关
+                r'Incompatible clusterIDs', # 集群ID不匹配
+                r'clusterID',              # 集群ID相关
+                # 连接相关
+                r'Connection refused',     # 连接被拒绝
+                r'connection.*failed',     # 连接失败
+                # 磁盘空间相关
+                r'No space left',          # 磁盘空间不足
+                r'disk.*full',             # 磁盘满
+            ]
+            
+            # 如果包含重要关键词，保留该日志
+            for keyword in important_keywords:
+                if re.search(keyword, line, re.IGNORECASE):
+                    return False  # 保留该行
+            
+            # 不包含重要关键词的INFO日志，过滤掉
             return True
     
     return False  # 保留该行

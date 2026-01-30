@@ -17,6 +17,7 @@ import os
 import signal
 import atexit
 import json
+import time
 import re
 from datetime import datetime
 
@@ -125,6 +126,130 @@ def update_monitoring_display():
         return error_html
 
 
+def analyze_agent_execution(result):
+    """
+    分析 Agent 的执行结果，输出详细的执行过程
+    
+    Args:
+        result: Agent.invoke() 返回的结果
+    """
+    print("\n" + "="*70)
+    print("[AGENT] 📋 Agent 执行过程分析")
+    print("="*70)
+    
+    if "messages" not in result:
+        print("[WARNING] 结果中没有 messages 字段")
+        return
+    
+    messages = result["messages"]
+    print(f"总消息数: {len(messages)}\n")
+    
+    tool_calls = []
+    llm_responses = []
+    step_num = 0
+    
+    for i, msg in enumerate(messages):
+        # 获取消息类型
+        msg_type = None
+        msg_content = None
+        
+        if hasattr(msg, "type"):
+            msg_type = msg.type
+            msg_content = getattr(msg, "content", None)
+        elif isinstance(msg, dict):
+            msg_type = msg.get("type")
+            msg_content = msg.get("content")
+        else:
+            # 尝试从类名推断
+            class_name = msg.__class__.__name__
+            if "Human" in class_name or "User" in class_name:
+                msg_type = "human"
+            elif "AI" in class_name or "Assistant" in class_name:
+                msg_type = "ai"
+            elif "Tool" in class_name:
+                msg_type = "tool"
+            msg_content = str(msg)
+        
+        # 处理用户消息
+        if msg_type in ["human", "user"]:
+            content = msg_content if msg_content else str(msg)
+            print(f"[步骤 {step_num}] 👤 用户输入:")
+            print(f"  {content[:200]}{'...' if len(str(content)) > 200 else ''}\n")
+            step_num += 1
+        
+        # 处理 AI 消息（包含工具调用）
+        elif msg_type in ["ai", "assistant", "AIMessage"]:
+            content = msg_content if msg_content else str(msg)
+            
+            # 检查是否有工具调用
+            tool_calls_in_msg = []
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                tool_calls_in_msg = msg.tool_calls
+            elif isinstance(msg, dict) and "tool_calls" in msg:
+                tool_calls_in_msg = msg["tool_calls"]
+            
+            if tool_calls_in_msg:
+                print(f"[步骤 {step_num}] 🤖 Agent 思考并决定调用工具:")
+                for tool_call in tool_calls_in_msg:
+                    tool_name = tool_call.get("name", tool_call.get("function", {}).get("name", "unknown"))
+                    tool_args = tool_call.get("args", tool_call.get("function", {}).get("arguments", {}))
+                    print(f"  🔧 工具: {tool_name}")
+                    if tool_args:
+                        args_str = json.dumps(tool_args, ensure_ascii=False, indent=4)
+                        if len(args_str) > 200:
+                            args_str = args_str[:200] + "..."
+                        print(f"     参数: {args_str}")
+                    tool_calls.append(tool_name)
+                print()
+            else:
+                # 纯文本响应
+                print(f"[步骤 {step_num}] 🤖 Agent 响应:")
+                preview = content[:300] + "..." if len(str(content)) > 300 else content
+                print(f"  {preview}\n")
+                llm_responses.append(len(str(content)))
+            step_num += 1
+        
+        # 处理工具返回消息
+        elif msg_type in ["tool", "ToolMessage"]:
+            tool_name = None
+            tool_output = None
+            
+            if hasattr(msg, "name"):
+                tool_name = msg.name
+            elif isinstance(msg, dict):
+                tool_name = msg.get("name", "unknown")
+            
+            if hasattr(msg, "content"):
+                tool_output = msg.content
+            elif isinstance(msg, dict):
+                tool_output = msg.get("content", "")
+            else:
+                tool_output = str(msg)
+            
+            print(f"[步骤 {step_num}] ✅ 工具执行结果: {tool_name}")
+            output_str = str(tool_output)
+            if len(output_str) > 500:
+                preview = output_str[:500] + "..."
+                print(f"  输出预览: {preview}")
+                print(f"  输出总长度: {len(output_str)} 字符\n")
+            else:
+                print(f"  输出: {output_str}\n")
+            step_num += 1
+    
+    # 输出统计信息
+    print("="*70)
+    print("[统计] 📊 执行统计")
+    print("="*70)
+    if tool_calls:
+        print(f"  工具调用次数: {len(tool_calls)}")
+        unique_tools = set(tool_calls)
+        print(f"  调用的工具: {', '.join(unique_tools)}")
+    if llm_responses:
+        print(f"  LLM响应次数: {len(llm_responses)}")
+        print(f"  总响应长度: {sum(llm_responses)} 字符")
+    print("="*70 + "\n")
+
+
 def create_gradio_interface():
     """创建 Gradio 界面"""
     
@@ -139,14 +264,14 @@ def create_gradio_interface():
     """
     
     # 使用 Blocks 创建更灵活的布局
-    with gr.Blocks(title="Hadoop 集群监控 Agent (LangChain + vLLM)", theme=gr.themes.Soft(), css=custom_css) as demo:
+    with gr.Blocks(title="HDFS 集群监控 Agent (LangChain + vLLM)", theme=gr.themes.Soft(), css=custom_css) as demo:
         # 使用两列布局：左侧（标题+监控），右侧（聊天）
         with gr.Row():
             # 左侧列：标题+功能说明 + 监控数据
             with gr.Column(scale=1, min_width=300):
                 # 标题和功能说明（放在左侧列内部）
                 gr.Markdown("""
-                #  Hadoop 集群监控智能助手
+                #  HDFS 集群监控智能助手
                 
                 **功能说明**：
                 - 📊 **实时监控**：显示集群关键指标
@@ -325,18 +450,42 @@ def create_gradio_interface():
             try:
                 # 根据选择的模型获取或创建 Agent
                 model_name = MODEL_NAME_MAP.get(selected_model, "qwen-8b")
-                print(f"[DEBUG] ========== 处理用户消息 ==========")
+                print(f"\n[DEBUG] ========== 处理用户消息 ==========")
+                print(f"[DEBUG] 用户消息: {message[:100]}{'...' if len(message) > 100 else ''}")
                 print(f"[DEBUG] 用户选择的模型: {selected_model} -> {model_name}")
                 print(f"[DEBUG] 调用 init_agent('{model_name}') 获取Agent...")
                 current_agent = init_agent(model_name)
                 print(f"[DEBUG] ✅ Agent获取成功，开始处理消息...")
                 
-                # 使用新的invoke方式调用Agent
+                # 使用 invoke 执行 Agent
                 config = {"configurable": {"thread_id": "gradio_chat"}}
-                result = current_agent.invoke(
-                    {"messages": [{"role": "user", "content": message}]},
-                    config=config
-                )
+                messages = [{"role": "user", "content": message}]
+                
+                print("\n" + "="*70)
+                print("[AGENT] 🚀 Agent 开始执行")
+                print("="*70)
+                
+                start_time = time.time()
+                
+                # 执行 Agent
+                try:
+                    result = current_agent.invoke(
+                        {"messages": messages},
+                        config=config
+                    )
+                except Exception as e:
+                    print(f"[ERROR] Agent 执行失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    raise
+                
+                execution_time = time.time() - start_time
+                
+                # 分析执行过程
+                analyze_agent_execution(result)
+                
+                print(f"[AGENT] ✅ Agent 执行完成 (总耗时: {execution_time:.2f}秒)")
+                print("="*70 + "\n")
                 
                 # 提取回复内容
                 # 需要找到最后一条AI消息（不是工具调用消息）
